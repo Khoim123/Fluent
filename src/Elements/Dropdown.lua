@@ -90,8 +90,8 @@ function Element:New(Idx, Config)
 	})
 
 	local DropdownScrollFrame = New("ScrollingFrame", {
-		Size = UDim2.new(1, -5, 1, -10),
-		Position = UDim2.fromOffset(5, 5),
+		Size = UDim2.new(1, -5, 1, -41),
+		Position = UDim2.fromOffset(5, 36),
 		BackgroundTransparency = 1,
 		BottomImage = "rbxassetid://6889812791",
 		MidImage = "rbxassetid://6889812721",
@@ -105,12 +105,41 @@ function Element:New(Idx, Config)
 		DropdownListLayout,
 	})
 
+	local SearchBox = New("TextBox", {
+		FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
+		Text = "",
+		PlaceholderText = "Search...",
+		TextColor3 = Color3.fromRGB(240, 240, 240),
+		PlaceholderColor3 = Color3.fromRGB(150, 150, 150),
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ClearTextOnFocus = false,
+		Size = UDim2.new(1, -10, 0, 26),
+		Position = UDim2.fromOffset(5, 5),
+		BackgroundTransparency = 0.9,
+		ZIndex = 24,
+		ThemeTag = {
+			BackgroundColor3 = "DropdownFrame",
+			TextColor3 = "Text",
+			PlaceholderColor3 = "SubText",
+		},
+	}, {
+		New("UICorner", {
+			CornerRadius = UDim.new(0, 5),
+		}),
+		New("UIPadding", {
+			PaddingLeft = UDim.new(0, 8),
+			PaddingRight = UDim.new(0, 8),
+		}),
+	})
+
 	local DropdownHolderFrame = New("Frame", {
 		Size = UDim2.fromScale(1, 0.6),
 		ThemeTag = {
 			BackgroundColor3 = "DropdownHolder",
 		},
 	}, {
+		SearchBox,
 		DropdownScrollFrame,
 		New("UICorner", {
 			CornerRadius = UDim.new(0, 7),
@@ -163,7 +192,7 @@ function Element:New(Idx, Config)
 		if #Dropdown.Values > 10 then
 			DropdownHolderCanvas.Size = UDim2.fromOffset(ListSizeX, 392)
 		else
-			DropdownHolderCanvas.Size = UDim2.fromOffset(ListSizeX, DropdownListLayout.AbsoluteContentSize.Y + 10)
+			DropdownHolderCanvas.Size = UDim2.fromOffset(ListSizeX, DropdownListLayout.AbsoluteContentSize.Y + 41)
 		end
 	end
 
@@ -178,6 +207,15 @@ function Element:New(Idx, Config)
 
 	Creator.AddSignal(DropdownInner.MouseButton1Click, function()
 		Dropdown:Open()
+	end)
+
+	Creator.AddSignal(SearchBox:GetPropertyChangedSignal("Text"), function()
+		local Query = SearchBox.Text:lower()
+		for _, Entry in next, Dropdown.ButtonList or {} do
+			local Match = Query == "" or tostring(Entry.Value):lower():find(Query, 1, true) ~= nil
+			Entry.Button.Visible = Match
+		end
+		RecalculateCanvasSize()
 	end)
 
 	Creator.AddSignal(UserInputService.InputBegan, function(Input)
@@ -214,6 +252,7 @@ function Element:New(Idx, Config)
 		ScrollFrame.ScrollingEnabled = true
 		DropdownHolderFrame.Size = UDim2.fromScale(1, 0.6)
 		DropdownHolderCanvas.Visible = false
+		SearchBox.Text = ""
 	end
 
 	function Dropdown:Display()
@@ -251,6 +290,7 @@ function Element:New(Idx, Config)
 	function Dropdown:BuildDropdownList()
 		local Values = Dropdown.Values
 		local Buttons = {}
+		local ButtonList = {}
 
 		for _, Element in next, DropdownScrollFrame:GetChildren() do
 			if not Element:IsA("UIListLayout") then
@@ -391,6 +431,7 @@ function Element:New(Idx, Config)
 			Dropdown:Display()
 
 			Buttons[Button] = Table
+			table.insert(ButtonList, { Button = Button, Value = Value })
 		end
 
 		ListSizeX = 0
@@ -402,6 +443,15 @@ function Element:New(Idx, Config)
 			end
 		end
 		ListSizeX = ListSizeX + 30
+
+		Dropdown.ButtonList = ButtonList
+
+		if SearchBox.Text ~= "" then
+			local Query = SearchBox.Text:lower()
+			for _, Entry in next, ButtonList do
+				Entry.Button.Visible = tostring(Entry.Value):lower():find(Query, 1, true) ~= nil
+			end
+		end
 
 		RecalculateCanvasSize()
 		RecalculateListSize()
