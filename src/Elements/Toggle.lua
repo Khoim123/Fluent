@@ -25,40 +25,34 @@ function Element:New(Idx, Config)
 	Toggle.SetTitle = ToggleFrame.SetTitle
 	Toggle.SetDesc = ToggleFrame.SetDesc
 
+	-- Hình tròn duy nhất, không trượt, chỉ đổi màu + icon check khi bật
 	local ToggleCircle = New("ImageLabel", {
-		AnchorPoint = Vector2.new(0, 0.5),
-		Size = UDim2.fromOffset(14, 14),
-		Position = UDim2.new(0, 2, 0.5, 0),
-		Image = "http://www.roblox.com/asset/?id=12266946128",
-		ImageTransparency = 0.5,
-		ThemeTag = {
-			ImageColor3 = "ToggleSlider",
-		},
-	})
-
-	local ToggleBorder = New("UIStroke", {
-		Transparency = 0.5,
-		ThemeTag = {
-			Color = "ToggleSlider",
-		},
-	})
-
-	local ToggleSlider = New("Frame", {
-		Size = UDim2.fromOffset(36, 18),
 		AnchorPoint = Vector2.new(1, 0.5),
+		Size = UDim2.fromOffset(18, 18),
 		Position = UDim2.new(1, -10, 0.5, 0),
-		Parent = ToggleFrame.Frame,
-		BackgroundTransparency = 1,
+		Image = "rbxassetid://3926305904", -- icon check (roblox default sprite sheet, thay bằng icon check bạn muốn)
+		ImageRectOffset = Vector2.new(312, 4),
+		ImageRectSize = Vector2.new(24, 24),
+		ImageTransparency = 1,
+		ScaleType = Enum.ScaleType.Fit,
+		BackgroundTransparency = 0,
 		ThemeTag = {
-			BackgroundColor3 = "Accent",
+			BackgroundColor3 = "ToggleSlider",
+			ImageColor3 = "ToggleToggled",
 		},
 	}, {
 		New("UICorner", {
-			CornerRadius = UDim.new(0, 9),
+			CornerRadius = UDim.new(1, 0), -- bo tròn hoàn toàn
 		}),
-		ToggleBorder,
-		ToggleCircle,
+		New("UIStroke", {
+			Transparency = 0.5,
+			ThemeTag = {
+				Color = "ToggleSlider",
+			},
+		}),
 	})
+
+	ToggleCircle.Parent = ToggleFrame.Frame
 
 	function Toggle:OnChanged(Func)
 		Toggle.Changed = Func
@@ -69,19 +63,15 @@ function Element:New(Idx, Config)
 		Value = not not Value
 		Toggle.Value = Value
 
-		Creator.OverrideTag(ToggleBorder, { Color = Toggle.Value and "Accent" or "ToggleSlider" })
-		Creator.OverrideTag(ToggleCircle, { ImageColor3 = Toggle.Value and "ToggleToggled" or "ToggleSlider" })
+		Creator.OverrideTag(ToggleCircle, {
+			BackgroundColor3 = Toggle.Value and "Accent" or "ToggleSlider",
+		})
+
 		TweenService:Create(
 			ToggleCircle,
-			TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-			{ Position = UDim2.new(0, Toggle.Value and 19 or 2, 0.5, 0) }
+			TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+			{ ImageTransparency = Toggle.Value and 0 or 1 }
 		):Play()
-		TweenService:Create(
-			ToggleSlider,
-			TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-			{ BackgroundTransparency = Toggle.Value and 0 or 1 }
-		):Play()
-		ToggleCircle.ImageTransparency = Toggle.Value and 0 or 0.5
 
 		Library:SafeCallback(Toggle.Callback, Toggle.Value)
 		Library:SafeCallback(Toggle.Changed, Toggle.Value)
