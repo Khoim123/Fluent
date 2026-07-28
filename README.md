@@ -13,7 +13,7 @@
 You can load Fluent through a GitHub Release:
 
 ```lua
-local Fluent = loadstring(game:HttpGet("https://github.com/Khoim123/Fluent/releases/latest/download/main.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Khoim123/Fluent/refs/heads/master/Main.lua"))()
 ```
 <br/>
 
