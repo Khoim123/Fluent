@@ -12,7 +12,7 @@ local Components = Root.Components
 
 local Element = {}
 Element.__index = Element
-Element.__type = "Dropdown"
+Element.__type = "DropdownCanFind"
 
 function Element:New(Idx, Config)
         local Library = self.Library
