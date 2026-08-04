@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   release:
     types: [ published, prereleased ]
-    
+
 permissions:
   contents: write
   packages: write
@@ -14,32 +14,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: GitHub Checkout
-      uses: actions/checkout@v3
+      - name: GitHub Checkout
+        uses: actions/checkout@v3
 
-    - name: Setup PNPM
-      uses: pnpm/action-setup@v2.2.4
-      with:
-        version: 7.25.1
-        run_install: true
-    
-    - name: Setup Aftman
-      uses: ok-nick/setup-aftman@v0.3.0
-    
-    - name: Install Rojo, Lune and DarkLua
-      run: aftman install
-        
-    - name: Build and Compile
-      run: |
-        pnpm run rojo --verbose
-      
-    - name: Bundle Luau
-      run: pnpm run bundle
-      
-    - name: Upload Release Assets
-      uses: alexellis/upload-assets@0.4.0
-      env:
-        ACTIONS_STEP_DEBUG: true
-        GITHUB_TOKEN: ${{ github.token }}
-      with:
-        asset_paths: '["dist/main.rbxm", "dist/main.lua"]'
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v2.2.4
+        with:
+          version: 7.25.1
+          run_install: true
+
+      - name: Setup Aftman
+        uses: ok-nick/setup-aftman@v0.3.0
+
+      - name: Install Rojo, Lune and DarkLua
+        run: aftman install
+
+      - name: Build and Compile
+        run: |
+          pnpm run rojo --verbose
+
+      - name: Bundle Luau
+        run: pnpm run bundle
+
+      - name: Commit Main.lua
+        run: |
+          cp dist/main.lua Main.lua
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Main.lua
+          git commit -m "Auto rebuild Main.lua" || echo "No changes to commit"
+          git push
+
+      - name: Upload Release Assets
+        continue-on-error: true
+        uses: alexellis/upload-assets@0.4.0
+        env:
+          ACTIONS_STEP_DEBUG: true
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          asset_paths: '["dist/main.rbxm", "dist/main.lua"]'
