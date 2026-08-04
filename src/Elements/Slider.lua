@@ -27,6 +27,7 @@ function Element:New(Idx, Config)
 	}
 
 	local Dragging = false
+	local ActiveTouch = nil -- theo dõi đúng ngón tay đang kéo
 
 	local SliderFrame = require(Components.Element)(Config.Title, Config.Description, self.Container, false)
 	SliderFrame.DescLabel.Size = UDim2.new(1, -170, 0, 14)
@@ -39,9 +40,21 @@ function Element:New(Idx, Config)
 		Position = UDim2.new(0, -7, 0.5, 0),
 		Size = UDim2.fromOffset(14, 14),
 		Image = "http://www.roblox.com/asset/?id=12266946128",
+		ZIndex = 2,
 		ThemeTag = {
 			ImageColor3 = "Accent",
 		},
+	})
+
+	-- Vùng chạm mở rộng, vô hình, to hơn hẳn để dễ bấm trúng trên điện thoại
+	local SliderDotHitbox = New("TextButton", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.fromOffset(36, 36),
+		BackgroundTransparency = 1,
+		Text = "",
+		ZIndex = 3,
+		Parent = SliderDot,
 	})
 
 	local SliderRail = New("Frame", {
@@ -100,23 +113,45 @@ function Element:New(Idx, Config)
 		SliderRail,
 	})
 
-	Creator.AddSignal(SliderDot.InputBegan, function(Input)
+	local function UpdateFromX(XPos)
+		local SizeScale = math.clamp((XPos - SliderRail.AbsolutePosition.X) / SliderRail.AbsoluteSize.X, 0, 1)
+		Slider:SetValue(Slider.Min + ((Slider.Max - Slider.Min) * SizeScale))
+	end
+
+	-- Bắt đầu kéo từ chấm (hitbox to hơn)
+	Creator.AddSignal(SliderDotHitbox.InputBegan, function(Input)
 		if
 			Input.UserInputType == Enum.UserInputType.MouseButton1
 			or Input.UserInputType == Enum.UserInputType.Touch
 		then
 			Dragging = true
+			ActiveTouch = Input
 		end
 	end)
 
-	Creator.AddSignal(SliderDot.InputEnded, function(Input)
+	-- Cho phép bấm/chạm bất kỳ đâu trên cả thanh trượt để nhảy tới đó và bắt đầu kéo luôn
+	-- (giúp thao tác trên điện thoại dễ hơn nhiều vì không cần bấm trúng chấm nhỏ)
+	Creator.AddSignal(SliderInner.InputBegan, function(Input)
 		if
 			Input.UserInputType == Enum.UserInputType.MouseButton1
 			or Input.UserInputType == Enum.UserInputType.Touch
 		then
-			Dragging = false
+			Dragging = true
+			ActiveTouch = Input
+			UpdateFromX(Input.Position.X)
 		end
 	end)
+
+	local function StopDragging(Input)
+		if ActiveTouch == nil or Input == ActiveTouch or Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			Dragging = false
+			ActiveTouch = nil
+		end
+	end
+
+	Creator.AddSignal(SliderDotHitbox.InputEnded, StopDragging)
+	Creator.AddSignal(SliderInner.InputEnded, StopDragging)
+	Creator.AddSignal(UserInputService.InputEnded, StopDragging)
 
 	Creator.AddSignal(UserInputService.InputChanged, function(Input)
 		if
@@ -126,9 +161,7 @@ function Element:New(Idx, Config)
 				or Input.UserInputType == Enum.UserInputType.Touch
 			)
 		then
-			local SizeScale =
-				math.clamp((Input.Position.X - SliderRail.AbsolutePosition.X) / SliderRail.AbsoluteSize.X, 0, 1)
-			Slider:SetValue(Slider.Min + ((Slider.Max - Slider.Min) * SizeScale))
+			UpdateFromX(Input.Position.X)
 		end
 	end)
 
