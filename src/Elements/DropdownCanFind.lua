@@ -91,7 +91,7 @@ function Element:New(Idx, Config)
 	})
 
 	local DropdownScrollFrame = New("ScrollingFrame", {
-		Size = UDim2.new(1, -5, 1, -10),
+		Size = UDim2.new(1, -10, 1, -50),
 		Position = UDim2.fromOffset(5, 40),
 		BackgroundTransparency = 1,
 		ClipsDescendants = true,
@@ -103,6 +103,8 @@ function Element:New(Idx, Config)
 		ScrollBarThickness = 4,
 		BorderSizePixel = 0,
 		CanvasSize = UDim2.fromScale(0, 0),
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 	}, {
 		DropdownListLayout,
 	})
@@ -200,15 +202,27 @@ function Element:New(Idx, Config)
 	end
 
 	local ListSizeX = 0
+	-- [FIX SCROLL #1] +50 bù cho 40 (top offset ScrollFrame) + 10 (padding đáy)
 	local function RecalculateListSize()
 		local contentHeight = DropdownListLayout.AbsoluteContentSize.Y
-		local finalHeight = math.clamp(contentHeight + 10, 40, 392)
+		local finalHeight = math.clamp(contentHeight + 50, 70, 392)
 		DropdownHolderCanvas.Size = UDim2.fromOffset(ListSizeX, finalHeight)
 	end
 
+	-- [FIX SCROLL #2] Tính CanvasSize dựa trên layout content
 	local function RecalculateCanvasSize()
-		DropdownScrollFrame.CanvasSize = UDim2.fromOffset(0, DropdownListLayout.AbsoluteContentSize.Y)
+		DropdownScrollFrame.CanvasSize =
+			UDim2.fromOffset(0, DropdownListLayout.AbsoluteContentSize.Y)
 	end
+
+	-- [FIX SCROLL #3] Auto re-calc khi layout thay đổi (thêm/xoá/đổi size button)
+	Creator.AddSignal(
+		DropdownListLayout:GetPropertyChangedSignal("AbsoluteContentSize"),
+		function()
+			RecalculateCanvasSize()
+			RecalculateListSize()
+		end
+	)
 
 	RecalculateListPosition()
 	RecalculateListSize()
@@ -266,11 +280,17 @@ function Element:New(Idx, Config)
 		Dropdown.Opened = true
 		ScrollFrame.ScrollingEnabled = false
 		DropdownHolderCanvas.Visible = true
-		TweenService:Create(
+		-- [FIX SCROLL #3] Re-calc sau khi tween mở xong để canvas đúng giá trị
+		local tw = TweenService:Create(
 			DropdownHolderFrame,
 			TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
 			{ Size = UDim2.fromScale(1, 1) }
-		):Play()
+		)
+		tw:Play()
+		tw.Completed:Connect(function()
+			RecalculateCanvasSize()
+			RecalculateListSize()
+		end)
 	end
 
 	-- [FIX #6] Clear search text khi Close
@@ -498,8 +518,11 @@ function Element:New(Idx, Config)
 		end
 		ListSizeX = ListSizeX + 30
 
-		RecalculateCanvasSize()
-		RecalculateListSize()
+		-- [FIX SCROLL #4] Defer 1 frame để AbsoluteContentSize cập nhật thật
+		task.defer(function()
+			RecalculateCanvasSize()
+			RecalculateListSize()
+		end)
 	end
 
 	function Dropdown:SetValues(NewValues)
