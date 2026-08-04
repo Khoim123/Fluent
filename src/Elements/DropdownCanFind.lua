@@ -94,6 +94,7 @@ function Element:New(Idx, Config)
 		Size = UDim2.new(1, -5, 1, -10),
 		Position = UDim2.fromOffset(5, 40),
 		BackgroundTransparency = 1,
+		ClipsDescendants = true,
 		BottomImage = "rbxassetid://6889812791",
 		MidImage = "rbxassetid://6889812721",
 		TopImage = "rbxassetid://6276641225",
@@ -125,6 +126,7 @@ function Element:New(Idx, Config)
 
 	local SearchBarFrame = New("Frame", {
 		BackgroundTransparency = 1,
+		ClipsDescendants = true,
 		Size = UDim2.new(1, -10, 0, 26),
 		Position = UDim2.fromOffset(5, 5),
 	}, {
@@ -143,6 +145,7 @@ function Element:New(Idx, Config)
 
 	local DropdownHolderFrame = New("Frame", {
 		Size = UDim2.fromScale(1, 0.6),
+		ClipsDescendants = true,
 		ThemeTag = {
 			BackgroundColor3 = "DropdownHolder",
 		},
@@ -172,6 +175,7 @@ function Element:New(Idx, Config)
 
 	local DropdownHolderCanvas = New("Frame", {
 		BackgroundTransparency = 1,
+		ClipsDescendants = true,
 		Size = UDim2.fromOffset(170, 300),
 		Parent = self.Library.GUI,
 		Visible = false,
@@ -371,10 +375,11 @@ function Element:New(Idx, Config)
 				TextColor3 = Color3.fromRGB(200, 200, 200),
 				TextSize = 13,
 				TextXAlignment = Enum.TextXAlignment.Left,
+				TextTruncate = Enum.TextTruncate.AtEnd,
 				BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 				AutomaticSize = Enum.AutomaticSize.Y,
 				BackgroundTransparency = 1,
-				Size = UDim2.fromScale(1, 1),
+				Size = UDim2.new(1, -20, 1, 0),
 				Position = UDim2.fromOffset(10, 0),
 				Name = "ButtonLabel",
 				ThemeTag = {
@@ -385,6 +390,7 @@ function Element:New(Idx, Config)
 			local Button = New("TextButton", {
 				Size = UDim2.new(1, -5, 0, 32),
 				BackgroundTransparency = 1,
+				ClipsDescendants = true,
 				ZIndex = 23,
 				Text = "",
 				Parent = DropdownScrollFrame,
