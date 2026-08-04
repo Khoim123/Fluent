@@ -1,19 +1,24 @@
 local Themes = {
-    Names = {
-        "Dark",
-        "Darker",
-        "Light",
-        "Aqua",
-        "Amethyst",
-        "Rose",
-        "Emerald",
-    },
+	Names = {
+		"Dark",
+		"Darker",
+		"Light",
+		"Aqua",
+		"Amethyst",
+		"Rose",
+		"Emerald",
+	},
 }
 
-for _, Theme in next, script:GetChildren() do
-    if Theme:IsA("ModuleScript") then
-        Themes[Theme.Name] = require(Theme)
-    end
+-- [FIX] Bản bundle (Main.lua) dùng virtual script KHÔNG hỗ trợ :IsA(),
+-- nên duyệt theo danh sách Names thay vì GetChildren() + IsA()
+for _, Name in next, Themes.Names do
+	local ok, ThemeModule = pcall(function()
+		return require(script[Name])
+	end)
+	if ok then
+		Themes[Name] = ThemeModule
+	end
 end
 
 return Themes
