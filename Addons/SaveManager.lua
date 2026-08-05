@@ -3,7 +3,12 @@ local httpService = game:GetService("HttpService")
 local SaveManager = {} do
 	SaveManager.Folder = "FluentSettings"
 	SaveManager.Ignore = {}
-	SaveManager.Version = 2 -- Schema version for migration support
+	SaveManager.Version = 2
+	SaveManager.AutoSaveEnabled = false      -- Bật/tắt auto-save toàn cục
+	SaveManager.AutoSaveConfig = "default"   -- Tên config mặc định để auto-save
+	SaveManager.AutoSaveDebounce = 2         -- Giây giữa mỗi auto-save (chống ghi liên tục)
+	SaveManager._lastAutoSave = 0            -- Timestamp lần auto-save cuối
+
 	SaveManager.Parser = {
 		Toggle = {
 			Save = function(idx, object)
@@ -17,7 +22,6 @@ local SaveManager = {} do
 		},
 		Slider = {
 			Save = function(idx, object)
-				-- Store as number directly instead of tostring to preserve precision
 				return { type = "Slider", idx = idx, value = object.Value }
 			end,
 			Load = function(idx, data)
@@ -72,7 +76,7 @@ local SaveManager = {} do
 	}
 
 	-- ============================================================
-	--  Utility: Validate config name (filesystem-safe, non-empty)
+	--  Utility: Validate config name
 	-- ============================================================
 	local INVALID_NAME_PATTERN = "[\\/:%*%?\"<>|]"
 
@@ -93,7 +97,7 @@ local SaveManager = {} do
 	end
 
 	-- ============================================================
-	--  Utility: Validate that decoded JSON has expected structure
+	--  Utility: Validate decoded JSON structure
 	-- ============================================================
 	local function isValidConfigData(decoded)
 		if type(decoded) ~= "table" then return false end
@@ -102,13 +106,10 @@ local SaveManager = {} do
 	end
 
 	-- ============================================================
-	--  Migrations: Upgrade old config schemas to current version
+	--  Migrations
 	-- ============================================================
 	SaveManager.Migrations = {
-		-- Migration from v1 (no version field) to v2
 		[1] = function(data)
-			-- v1 Slider values were stored as strings via tostring()
-			-- Convert them to numbers for v2
 			for _, obj in next, data.objects do
 				if obj.type == "Slider" and type(obj.value) == "string" then
 					obj.value = tonumber(obj.value) or 0
@@ -120,15 +121,11 @@ local SaveManager = {} do
 
 	local function migrateConfig(data)
 		local version = data.version or 1
-
 		while version < SaveManager.Version do
 			local migrator = SaveManager.Migrations[version]
-			if migrator then
-				data = migrator(data)
-			end
+			if migrator then data = migrator(data) end
 			version = version + 1
 		end
-
 		data.version = SaveManager.Version
 		return data
 	end
@@ -155,13 +152,11 @@ local SaveManager = {} do
 	end
 
 	-- ----------------------------------------------------------
-	--  Save: Validated name + atomic write with backup
+	--  Save: Atomic write with backup
 	-- ----------------------------------------------------------
 	function SaveManager:Save(name)
 		local valid, err = self:IsNameValid(name)
-		if not valid then
-			return false, err
-		end
+		if not valid then return false, err end
 
 		local fullPath = self.Folder .. "/settings/" .. name .. ".json"
 		local tempPath = fullPath .. ".tmp"
@@ -174,22 +169,15 @@ local SaveManager = {} do
 		for idx, option in next, SaveManager.Options do
 			if not self.Parser[option.Type] then continue end
 			if self.Ignore[idx] then continue end
-
 			table.insert(data.objects, self.Parser[option.Type].Save(idx, option))
 		end
 
 		local success, encoded = pcall(httpService.JSONEncode, httpService, data)
-		if not success then
-			return false, "failed to encode data"
-		end
+		if not success then return false, "failed to encode data" end
 
-		-- Step 1: Write to temp file first (atomic write pattern)
 		local writeOk, writeErr = pcall(writefile, tempPath, encoded)
-		if not writeOk then
-			return false, "failed to write temp file: " .. tostring(writeErr)
-		end
+		if not writeOk then return false, "failed to write temp file: " .. tostring(writeErr) end
 
-		-- Step 2: If original exists, create a backup before replacing
 		if isfile(fullPath) then
 			pcall(function()
 				local existing = readfile(fullPath)
@@ -197,10 +185,8 @@ local SaveManager = {} do
 			end)
 		end
 
-		-- Step 3: Write the actual file
 		local finalOk, finalErr = pcall(writefile, fullPath, encoded)
 		if not finalOk then
-			-- Attempt to restore from backup if write failed
 			if isfile(fullPath .. ".bak") then
 				pcall(function()
 					local backup = readfile(fullPath .. ".bak")
@@ -211,14 +197,12 @@ local SaveManager = {} do
 			return false, "failed to write config: " .. tostring(finalErr)
 		end
 
-		-- Step 4: Clean up temp file
 		pcall(delfile, tempPath)
-
 		return true
 	end
 
 	-- ----------------------------------------------------------
-	--  Load: Validate + migrate + safe per-option loading
+	--  Load: Validate + migrate + safe loading
 	-- ----------------------------------------------------------
 	function SaveManager:Load(name)
 		if not name or name:gsub(" ", "") == "" then
@@ -226,25 +210,16 @@ local SaveManager = {} do
 		end
 
 		local file = self.Folder .. "/settings/" .. name .. ".json"
-		if not isfile(file) then
-			return false, "invalid file"
-		end
+		if not isfile(file) then return false, "invalid file" end
 
 		local readOk, raw = pcall(readfile, file)
-		if not readOk then
-			return false, "failed to read file"
-		end
+		if not readOk then return false, "failed to read file" end
 
 		local success, decoded = pcall(httpService.JSONDecode, httpService, raw)
-		if not success then
-			return false, "decode error"
-		end
+		if not success then return false, "decode error" end
 
-		if not isValidConfigData(decoded) then
-			return false, "invalid data structure"
-		end
+		if not isValidConfigData(decoded) then return false, "invalid data structure" end
 
-		-- Migrate old config to current version
 		decoded = migrateConfig(decoded)
 
 		local loadErrors = {}
@@ -265,7 +240,6 @@ local SaveManager = {} do
 			end)
 		end
 
-		-- Give spawned loads a few frames to finish (bounded so it can't hang)
 		local framesWaited = 0
 		while pending > 0 and framesWaited < 10 do
 			task.wait()
@@ -280,7 +254,7 @@ local SaveManager = {} do
 	end
 
 	-- ----------------------------------------------------------
-	--  Delete: Remove a config file (and its backup/temp files)
+	--  Delete
 	-- ----------------------------------------------------------
 	function SaveManager:Delete(name)
 		if not name or name:gsub(" ", "") == "" then
@@ -288,33 +262,85 @@ local SaveManager = {} do
 		end
 
 		local fullPath = self.Folder .. "/settings/" .. name .. ".json"
-		if not isfile(fullPath) then
-			return false, "config file does not exist"
-		end
+		if not isfile(fullPath) then return false, "config file does not exist" end
 
 		local ok, err = pcall(delfile, fullPath)
-		if not ok then
-			return false, "failed to delete: " .. tostring(err)
-		end
+		if not ok then return false, "failed to delete: " .. tostring(err) end
 
-		if isfile(fullPath .. ".bak") then
-			pcall(delfile, fullPath .. ".bak")
-		end
-		if isfile(fullPath .. ".tmp") then
-			pcall(delfile, fullPath .. ".tmp")
-		end
+		pcall(delfile, fullPath .. ".bak")
+		pcall(delfile, fullPath .. ".tmp")
 
 		return true
 	end
 
 	-- ----------------------------------------------------------
-	--  ClearAutoload: Remove autoload setting
+	--  ClearAutoload
 	-- ----------------------------------------------------------
 	function SaveManager:ClearAutoload()
 		local path = self.Folder .. "/settings/autoload.txt"
-		if isfile(path) then
-			pcall(delfile, path)
+		if isfile(path) then pcall(delfile, path) end
+	end
+
+	-- ----------------------------------------------------------
+	--  ★ AUTO-SAVE: Debounced save khi option thay đổi
+	-- ----------------------------------------------------------
+	function SaveManager:AutoSave()
+		if not self.AutoSaveEnabled then return end
+
+		local now = tick()
+		if (now - self._lastAutoSave) < self.AutoSaveDebounce then
+			-- Debounce: quá gần lần save trước → schedule lại
+			if not self._autoSavePending then
+				self._autoSavePending = true
+				task.delay(self.AutoSaveDebounce, function()
+					self._autoSavePending = false
+					self:AutoSave()
+				end)
+			end
+			return
 		end
+
+		self._lastAutoSave = now
+		local ok, err = pcall(self.Save, self, self.AutoSaveConfig)
+		if not ok then
+			warn("[SaveManager] AutoSave failed:", err)
+		end
+	end
+
+	-- ----------------------------------------------------------
+	--  ★ ENABLE AUTO-SAVE: Tự động gắn OnChanged cho TẤT CẢ option
+	--     Chỉ cần gọi 1 lần sau khi tạo xong tất cả option
+	-- ----------------------------------------------------------
+	function SaveManager:EnableAutoSave(configName, debounceSeconds)
+		self.AutoSaveEnabled = true
+		self.AutoSaveConfig = configName or "default"
+		self.AutoSaveDebounce = debounceSeconds or 2
+
+		-- Gắn OnChanged cho tất cả option hiện có
+		for idx, option in next, self.Options do
+			if self.Ignore[idx] then continue end
+			if not self.Parser[option.Type] then continue end
+			if option.OnChanged then
+				option:OnChanged(function()
+					SaveManager:AutoSave()
+				end)
+			end
+		end
+
+		-- Hook vào Library để bắt option mới được tạo sau này
+		if self.Library and self.Library._addOptionCallback == nil then
+			self.Library._addOptionCallback = function(option)
+				if option.OnChanged and not SaveManager.Ignore[option.idx] and SaveManager.Parser[option.Type] then
+					option:OnChanged(function()
+						SaveManager:AutoSave()
+					end)
+				end
+			end
+		end
+	end
+
+	function SaveManager:DisableAutoSave()
+		self.AutoSaveEnabled = false
 	end
 
 	function SaveManager:IgnoreThemeSettings()
@@ -324,25 +350,15 @@ local SaveManager = {} do
 	end
 
 	function SaveManager:BuildFolderTree()
-		local paths = {
-			self.Folder,
-			self.Folder .. "/settings"
-		}
-
+		local paths = { self.Folder, self.Folder .. "/settings" }
 		for i = 1, #paths do
 			local str = paths[i]
-			if not isfolder(str) then
-				makefolder(str)
-			end
+			if not isfolder(str) then makefolder(str) end
 		end
 	end
 
-	-- ----------------------------------------------------------
-	--  RefreshConfigList: Pattern-matched, ignores .bak/.tmp
-	-- ----------------------------------------------------------
 	function SaveManager:RefreshConfigList()
 		local list = listfiles(self.Folder .. "/settings")
-
 		local out = {}
 		for i = 1, #list do
 			local file = list[i]
@@ -353,7 +369,6 @@ local SaveManager = {} do
 				end
 			end
 		end
-
 		return out
 	end
 
@@ -364,7 +379,6 @@ local SaveManager = {} do
 
 	function SaveManager:LoadAutoloadConfig()
 		local autoloadPath = self.Folder .. "/settings/autoload.txt"
-
 		if not isfile(autoloadPath) then return end
 
 		local readOk, name = pcall(readfile, autoloadPath)
@@ -375,12 +389,9 @@ local SaveManager = {} do
 
 		local success, err = self:Load(name)
 		if not success then
-			-- If the config file was deleted but autoload.txt still references it,
-			-- clean up autoload.txt automatically
 			if err == "invalid file" then
 				pcall(delfile, autoloadPath)
 			end
-
 			return self.Library:Notify({
 				Title = "Interface",
 				Content = "Config loader",
@@ -398,17 +409,76 @@ local SaveManager = {} do
 	end
 
 	-- ----------------------------------------------------------
-	--  BuildConfigSection: Full UI with Delete & Clear Autoload
+	--  ★ SETUP: Hàm 1-call thiết lập mọi thứ
+	--     SaveManager:Setup(library, folder, autoSaveConfig)
+	--     → SetLibrary + SetFolder + IgnoreThemeSettings
+	--     → LoadAutoloadConfig
+	--     → EnableAutoSave
+	--     → Nếu chưa có autoload → tạo config mặc định
+	-- ----------------------------------------------------------
+	function SaveManager:Setup(library, folder, autoSaveConfig)
+		folder = folder or "FluentSettings"
+		autoSaveConfig = autoSaveConfig or "default"
+
+		-- 1. Gắn library
+		self:SetLibrary(library)
+
+		-- 2. Set thư mục (sẽ tạo folder tự động)
+		self:SetFolder(folder)
+
+		-- 3. Ignore theme settings
+		self:IgnoreThemeSettings()
+
+		-- 4. Load autoload config
+		self:LoadAutoloadConfig()
+
+		-- 5. Nếu chưa có autoload → tạo config mặc định và set autoload
+		task.defer(function()
+			task.wait(1) -- Đợi UI render
+
+			local autoloadPath = self.Folder .. "/settings/autoload.txt"
+			if not isfile(autoloadPath) then
+				self:Save(autoSaveConfig)
+				pcall(writefile, autoloadPath, autoSaveConfig)
+				self.AutoSaveConfig = autoSaveConfig
+			else
+				-- Dùng tên autoload config hiện tại cho auto-save
+				local ok, name = pcall(readfile, autoloadPath)
+				if ok and name and name:gsub(" ", "") ~= "" then
+					self.AutoSaveConfig = name
+				end
+			end
+
+			-- 6. Bật auto-save (debounce 2 giây)
+			self:EnableAutoSave(self.AutoSaveConfig, 2)
+		end)
+	end
+
+	-- ----------------------------------------------------------
+	--  BuildConfigSection
 	-- ----------------------------------------------------------
 	function SaveManager:BuildConfigSection(tab)
 		assert(self.Library, "Must set SaveManager.Library")
 
-		local AutoloadButton -- declared up front so every callback can safely reference it
-
+		local AutoloadButton
 		local section = tab:AddSection("Configuration")
 
 		section:AddInput("SaveManager_ConfigName", { Title = "Config name" })
 		section:AddDropdown("SaveManager_ConfigList", { Title = "Config list", Values = self:RefreshConfigList(), AllowNull = true })
+
+		-- Auto-save toggle
+		section:AddToggle("SaveManager_AutoSave", {
+			Title = "Auto Save",
+			Description = "Automatically save config when options change",
+			Default = self.AutoSaveEnabled,
+			Callback = function(value)
+				if value then
+					SaveManager:EnableAutoSave(SaveManager.AutoSaveConfig, SaveManager.AutoSaveDebounce)
+				else
+					SaveManager:DisableAutoSave()
+				end
+			end
+		})
 
 		local function notify(subContent)
 			self.Library:Notify({
@@ -428,16 +498,11 @@ local SaveManager = {} do
 			Title = "Create config",
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigName.Value
-
 				local valid, err = self:IsNameValid(name)
-				if not valid then
-					return notify(err)
-				end
+				if not valid then return notify(err) end
 
 				local success, saveErr = self:Save(name)
-				if not success then
-					return notify("Failed to save config: " .. saveErr)
-				end
+				if not success then return notify("Failed to save config: " .. saveErr) end
 
 				notify(string.format("Created config %q", name))
 				refreshDropdown()
@@ -448,16 +513,10 @@ local SaveManager = {} do
 			Title = "Load config",
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigList.Value
-
-				if not name then
-					return notify("No config selected")
-				end
+				if not name then return notify("No config selected") end
 
 				local success, err = self:Load(name)
-				if not success then
-					return notify("Failed to load config: " .. err)
-				end
-
+				if not success then return notify("Failed to load config: " .. err) end
 				notify(string.format("Loaded config %q", name))
 			end
 		})
@@ -466,16 +525,10 @@ local SaveManager = {} do
 			Title = "Overwrite config",
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigList.Value
-
-				if not name then
-					return notify("No config selected")
-				end
+				if not name then return notify("No config selected") end
 
 				local success, err = self:Save(name)
-				if not success then
-					return notify("Failed to overwrite config: " .. err)
-				end
-
+				if not success then return notify("Failed to overwrite config: " .. err) end
 				notify(string.format("Overwrote config %q (backup saved)", name))
 			end
 		})
@@ -484,17 +537,11 @@ local SaveManager = {} do
 			Title = "Delete config",
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigList.Value
-
-				if not name then
-					return notify("No config selected to delete")
-				end
+				if not name then return notify("No config selected to delete") end
 
 				local success, err = self:Delete(name)
-				if not success then
-					return notify("Failed to delete config: " .. err)
-				end
+				if not success then return notify("Failed to delete config: " .. err) end
 
-				-- If the deleted config was the autoload, clean up autoload.txt
 				local autoloadPath = self.Folder .. "/settings/autoload.txt"
 				if isfile(autoloadPath) then
 					local ok, current = pcall(readfile, autoloadPath)
@@ -511,9 +558,7 @@ local SaveManager = {} do
 
 		section:AddButton({
 			Title = "Refresh list",
-			Callback = function()
-				refreshDropdown()
-			end
+			Callback = function() refreshDropdown() end
 		})
 
 		AutoloadButton = section:AddButton({
@@ -521,16 +566,12 @@ local SaveManager = {} do
 			Description = "Current autoload config: none",
 			Callback = function()
 				local name = SaveManager.Options.SaveManager_ConfigList.Value
+				if not name then return notify("No config selected for autoload") end
 
-				if not name then
-					return notify("No config selected for autoload")
-				end
+				local writeOk = pcall(writefile, self.Folder .. "/settings/autoload.txt", name)
+				if not writeOk then return notify("Failed to set autoload") end
 
-				local writeOk, writeErr = pcall(writefile, self.Folder .. "/settings/autoload.txt", name)
-				if not writeOk then
-					return notify("Failed to set autoload: " .. tostring(writeErr))
-				end
-
+				self.AutoSaveConfig = name
 				AutoloadButton:SetDesc("Current autoload config: " .. name)
 				notify(string.format("Set %q to auto load", name))
 			end
@@ -545,7 +586,7 @@ local SaveManager = {} do
 			end
 		})
 
-		-- Initialize autoload button description
+		-- Init autoload description
 		local autoloadPath = self.Folder .. "/settings/autoload.txt"
 		if isfile(autoloadPath) then
 			local ok, name = pcall(readfile, autoloadPath)
@@ -556,7 +597,7 @@ local SaveManager = {} do
 			end
 		end
 
-		SaveManager:SetIgnoreIndexes({ "SaveManager_ConfigList", "SaveManager_ConfigName" })
+		SaveManager:SetIgnoreIndexes({ "SaveManager_ConfigList", "SaveManager_ConfigName", "SaveManager_AutoSave" })
 	end
 
 	SaveManager:BuildFolderTree()
