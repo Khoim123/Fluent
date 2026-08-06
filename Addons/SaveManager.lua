@@ -685,8 +685,8 @@ local SaveManager = {} do
         -- Auto-Save toggle (trong GUI)
         ---------------------------------------------------
         section:AddToggle("SaveManager_AutoSave", {
-            Title   = "Auto-Save",
-            Default = false,
+            Title   = "Auto Save",
+            Default = true,
             Callback = function(value)
                 if value then
                     SaveManager:EnableAutoSave()
