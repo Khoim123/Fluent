@@ -2,7 +2,7 @@ local Themes = {
 	Names = {
 		"Dark",
 		"Darker",
-  "Deep Sapphire",
+"Deep Sapphire",
 		"Light",
 		"Aqua",
 		"Amethyst",
