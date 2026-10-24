@@ -1,36 +1,25 @@
-local Themes = {}
+local Themes = {
+    Names = {},
+}
 
--- Lặp qua children, chỉ require ModuleScript, có pcall + validate
-for _, Child in ipairs(script:GetChildren()) do
-        if not Child:IsA("ModuleScript") then
-                continue
+-- Duyệt qua tất cả các con của script
+for _, Theme in ipairs(script:GetChildren()) do
+    -- 1. Chỉ xử lý nếu đó là ModuleScript (dùng IsA trên Instance)
+    if Theme:IsA("ModuleScript") then
+        -- 2. Dùng pcall để bắt lỗi nếu file theme bị lỗi cú pháp
+        local success, result = pcall(require, Theme)
+        
+        if success and type(result) == "table" and result.Name then
+            -- 3. Lưu theme vào bảng với key là tên của nó
+            Themes[result.Name] = result
+            table.insert(Themes.Names, result.Name)
+        else
+            warn("[Themes] Không thể tải theme: " .. Theme.Name)
         end
-
-        local ok, Result = pcall(require, Child)
-        if not ok then
-                warn(("[Themes] Lỗi load '%s': %s"):format(Child.Name, tostring(Result)))
-                continue
-        end
-
-        if type(Result) ~= "table" or type(Result.Name) ~= "string" then
-                warn(("[Themes] '%s' thiếu field Name hoặc không phải table"):format(Child.Name))
-                continue
-        end
-
-        if Themes[Result.Name] then
-                warn(("[Themes] Trùng tên theme: '%s' (file %s)"):format(Result.Name, Child.Name))
-                continue
-        end
-
-        Themes[Result.Name] = Result
+    end
 end
 
--- Tự build Names từ theme đã load thành công + sort alphabet
-local Names = {}
-for Name in next, Themes do
-        table.insert(Names, Name)
-end
-table.sort(Names)
-Themes.Names = Names
+-- Sắp xếp danh sách tên cho gọn gàng
+table.sort(Themes.Names)
 
 return Themes
